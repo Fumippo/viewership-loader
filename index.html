@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TVAL now 画像 → 1分刻み視聴率（iPad版）</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--line:#dce3ed;--text:#202d3e;--muted:#5c6c83;--accent:#175ac6;--accent2:#124391;--warn:#a04508}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:15px;line-height:1.55}
+.wrap{max-width:1160px;margin:auto;padding:18px 14px 40px}h1{font-size:clamp(21px,3.3vw,29px);margin:4px 0 0}h2{font-size:19px;margin:4px 0 14px}h3{font-size:16px;margin:10px 0}p{margin:8px 0}.small,.hint{font-size:12px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:17px;margin:14px 0;box-shadow:0 2px 8px #1220410b}.fields{display:grid;grid-template-columns:1fr 1fr;gap:13px 18px}.field{min-width:0}.field label{display:block;font-weight:620;margin-bottom:5px}.field input:not([type=checkbox]),.field select{width:100%;border:1px solid #bdcadd;border-radius:9px;padding:10px 11px;font:inherit;background:#fff;color:var(--text);min-height:42px}.field input[type=file]{padding:8px 5px}.field input[type=range]{padding:0;min-height:30px;accent-color:var(--accent)}.field input[type=checkbox]{transform:scale(1.25);accent-color:var(--accent);margin-right:9px}.field .inline{display:flex;align-items:center;gap:10px}.field .inline input{flex:1}.field .inline output{font-weight:700;min-width:3ch}.full{grid-column:1/-1}
+button,.download-link{display:inline-flex;justify-content:center;align-items:center;gap:6px;text-decoration:none;cursor:pointer;font:inherit;font-weight:660;border-radius:9px;border:1px solid var(--accent);padding:11px 18px;min-height:45px;color:var(--accent);background:white}button.primary,.download-link.primary{color:white;background:var(--accent)}button.primary:hover,.download-link.primary:hover{background:var(--accent2)}button:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:13px}.notice{padding:10px 13px;border-radius:9px;border:1px solid #b5d3ff;background:#eef5ff;margin:12px 0}.notice.error{background:#fff1ef;border-color:#f1b2a9;color:#ae1e16}.notice.warn{background:#fff7e7;border-color:#f0d393;color:var(--warn)}.notice.success{background:#edf9f1;border-color:#9bd5ab;color:#17623c} .hidden{display:none!important}
+#preview{max-width:100%;max-height:360px;object-fit:contain;border:1px solid var(--line);border-radius:9px;background:#fff;display:block}#overlayCanvas{display:block;width:100%;height:auto;max-height:700px;object-fit:contain;border-radius:8px;border:1px solid var(--line)}
+#results nav{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}#results nav button{padding:8px 13px;min-height:38px}#results nav button.active{color:white;background:var(--accent)}.pane{display:none}.pane.active{display:block}.plot{width:100%;height:350px;border:1px solid var(--line);border-radius:10px;background:#fff;display:block;margin:12px 0 20px}.plot.tall{height:430px}.plot.short{height:250px}
+.tblwrap{overflow:auto;max-height:530px;border:1px solid var(--line);border-radius:9px}.tbl{border-collapse:separate;border-spacing:0;min-width:100%;font-size:13px}.tbl td,.tbl th{padding:6px 9px;border-bottom:1px solid #e3e8f0;border-right:1px solid #e3e8f0;white-space:nowrap}.tbl th{position:sticky;top:0;background:#eaf0f9;text-align:left;z-index:1}.tbl tr:nth-child(even){background:#f8faff}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px}.metric{padding:12px;border-radius:9px;background:#f2f6fc;border:1px solid #dfebfc}.metric span{display:block;font-size:12px;color:var(--muted)}.metric b{font-size:19px}details{border:1px solid var(--line);padding:12px;border-radius:10px;margin:12px 0;background:#fff}summary{font-weight:700;cursor:pointer}#csvFallback{width:100%;min-height:120px;font-size:12px;border:1px solid #c5d3e8;border-radius:6px}.progress{font-weight:700;color:var(--accent)}
+@media(max-width:640px){.fields{grid-template-columns:1fr}.wrap{padding:11px 9px 35px}.card{padding:12px}.plot{height:275px}.plot.tall{height:320px}.plot.short{height:210px}button,.download-link{width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><h1>📺 TVAL now 画像 → 1分刻み視聴率</h1><p class="small">iPad / Safari向け・サーバー不要・6局解析・CSV 27列｜元コード：App.py 9.2.1 / reader.py 9.2.1-adaptive-range</p></header>
+<section class="card" aria-label="入力と解析条件">
+<div class="fields">
+  <div class="field full"><label for="inputFile">スクリーンショットを選択（PNG / JPEG / WebP）</label><input id="inputFile" type="file" accept="image/png,image/jpeg,image/webp"></div>
+  <div class="field"><label for="endDate">「データ更新」の日付</label><input id="endDate" type="date"></div>
+  <div class="field"><label for="endTime">「データ更新」の時刻</label><input id="endTime" type="time" value="21:15"></div>
+  <div class="field"><label for="duration">グラフ表示時間（分）</label><input id="duration" type="number" min="30" max="360" step="1" value="180"></div>
+  <div class="field"><label for="gridStep">縦軸1目盛り（%）</label><input id="gridStep" type="number" min="0.5" max="20" step="0.5" value="2"></div>
+  <div class="field"><label for="mode">色線解析モード</label><select id="mode"><option value="auto">自動（推奨）</option><option value="strict">従来の厳格24</option><option value="high-range">高レンジ35（検証用）</option></select></div>
+  <div class="field"><label for="tolerance">カーソルRGB差</label><div class="inline"><input id="tolerance" type="range" min="10" max="50" step="1" value="20"><output id="tolLabel" for="tolerance">20</output></div></div>
+  <div class="field full"><label for="endValues">画面上部の6局の数値（任意、NHK・日テレ・テレ朝・TBS・テレ東・フジ）</label><input id="endValues" type="text" placeholder="3.2, 5.7, 6.5, 20.0, 3.8, 3.2"></div>
+  <div class="field full"><label><input id="overlay" type="checkbox">解析線を元画像に重ねて検証する</label></div>
+</div>
+<div class="actions"><button type="button" id="analyze" class="primary">▶ 解析する</button><button type="button" id="reset">↺ 次の画像を選ぶ</button></div>
+<div id="status" class="notice" role="status">画像と更新日時を指定して「解析する」を押してください。画像処理はこのiPad内だけで完結します。</div>
+<div id="previewSection" class="hidden"><p id="previewTitle" class="small"></p><img id="preview" alt="アップロードされたTVALグラフのプレビュー"></div>
+</section>
+<section id="results" class="card hidden">
+<h2>解析結果</h2><div id="summary" class="metrics"></div>
+<div class="actions"><button class="primary" id="download">⬇ CSVをダウンロード（保存後、自動クリア）</button><button id="copyCsv" type="button">CSVをクリップボードへコピー</button></div>
+<p class="small">iPadのSafariや埋め込み先によってはダウンロードが制限される場合があります。そのときは「CSVをコピー」を利用してください。Googleサイト内では保存失敗によるデータ消失を防ぐため、自動クリアしません。</p>
+<details><summary>自動較正・品質診断（A/B/C）</summary><div id="calibration" class="metrics" style="margin:12px 0"></div><div id="diagnostics"></div><p class="small">A/B/Cは画像上の色証拠の評価であり、視聴率数値の正確さを保証しません。</p></details>
+<details id="endpointCheck" class="hidden"><summary id="endpointTitle">終端照合</summary><div id="endpointTable"></div></details>
+<details id="overlayDetails" class="hidden"><summary>解析線の重ね合わせ</summary><canvas id="overlayCanvas"></canvas></details>
+<nav id="tabs"><button data-tab="ratings" class="active">視聴率</button><button data-tab="shares">6局シェア</button><button data-tab="ranks">順位割合</button><button data-tab="all">全データ</button></nav>
+<div class="pane active" id="pane-ratings"><canvas id="ratingsPlot" class="plot tall"></canvas><canvas id="totalPlot" class="plot short"></canvas></div>
+<div class="pane" id="pane-shares"><canvas id="sharesPlot" class="plot tall"></canvas></div>
+<div class="pane" id="pane-ranks"><canvas id="ranksPlot" class="plot tall"></canvas><div id="ranksTable"></div></div>
+<div class="pane" id="pane-all"><div id="allData" class="tblwrap"></div></div>
+<details><summary>CSVが保存できない場合：CSV本文を表示</summary><textarea id="csvFallback" readonly></textarea></details>
+</section>
+<footer><p class="small">このアプリは外部ライブラリ・外部API・ログインを使用しません。学校管理端末の制限によりHTML埋め込みやJavaScriptの動作が許可されていない場合は利用できません。</p></footer>
+</div>
+<script>
+'use strict';
+// TVAL reader 9.2.1-adaptive-range: dependency-free JavaScript port for Safari.
+// All graph-image analysis runs inside the user's browser, without remote calls.
+const STATIONS=['NHK総合','日本テレビ','テレビ朝日','TBS','テレビ東京','フジテレビ'];
+const STATION_COLORS=[[182,188,195],[254,216,120],[246,162,228],[100,148,240],[89,113,175],[243,124,124]];
+const OVERLAY_COLORS=['#464646','#eba600','#d230be','#0058f0','#14236c','#d72323'];
+const CHART_COLORS=['#515151','#e1a800','#c231bb','#1974ed','#152a86','#d92a2a'];
+const STRICT=24,RELAXED=35, HIGH_RANGE_PERCENT=18;
+const CSV_COLUMNS=['日時',...STATIONS,'6局合計','その他5局合計',...STATIONS.map(s=>s+'_シェア'),...STATIONS.flatMap(s=>[s+'_順位',s+'_状態'])];
+const delayUI=()=>new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
+const $=id=>document.getElementById(id);
+function assert(c, message){if(!c)throw Error(message);}
+function groupConsecutive(vals,maxGap=1){const groups=[];for(const raw of vals){const v=Number(raw)|0;if(!groups.length || v-groups[groups.length-1][groups[groups.length-1].length-1]>maxGap)groups.push([v]);else groups[groups.length-1].push(v);}return groups;}
+function median(vals){assert(vals.length,'median: empty values');const a=Array.from(vals).sort((x,y)=>x-y);return a.length%2?a[(a.length-1)>>1]:(a[a.length/2-1]+a[a.length/2])/2;}
+function mean(a){return a.reduce((x,y)=>x+y,0)/a.length;}
+function clamp(x,a,b){return Math.min(b,Math.max(a,x));}
+function roundEven(x){if(!Number.isFinite(x))return x;const a=Math.floor(x),d=x-a;return d<.5?a:d>.5?a+1:(a%2===0?a:a+1);}
+function roundTo(x,decimals=1){const q=10**decimals;return roundEven(x*q)/q;}
+function neutral(r,g,b,maxSpread,minBright,maxBright){const spread=Math.max(r,g,b)-Math.min(r,g,b),brightness=(r+g+b)/3;return spread<=maxSpread&&brightness>=minBright&&brightness<=maxBright;}
+function px(data,w,x,y){return (y*w+x)*4;}
+function findThinHorizontalLines(data,w,h){
+ const x0=Math.floor(w*.08),x1=Math.floor(w*.95),cand=[];
+ for(let y=0;y<h;y++){let count=0;for(let x=x0;x<x1;x++){const i=px(data,w,x,y);if(neutral(data[i],data[i+1],data[i+2],20,195,253))count++;}if(count/(x1-x0)>=.65)cand.push(y);}
+ const groups=groupConsecutive(cand,1),lines=[];
+ for(const g of groups){const y=roundEven(mean(g));if(g.length>=1&&g.length<=Math.max(7,Math.min(12,Math.floor(h*.006)))&&y>=Math.floor(h*.18)&&y<=Math.floor(h*.99))lines.push(y);}
+ assert(lines.length>=3,'not enough horizontal gridlines（水平グリッド線が3本未満です）');return lines;
+}
+function selectRegularGrid(lines,h,minLines=3){
+ const ys=Array.from(new Set(lines)).sort((a,b)=>a-b);assert(ys.length>=minLines,'not enough grid');
+ const minGap=Math.max(20,h*.015), maxGap=Math.max(minGap+1,h*.45),candidates=[];
+ for(let i=0;i<ys.length;i++)for(let j=i+1;j<ys.length;j++)for(let steps=1;steps<=12;steps++){const g=(ys[j]-ys[i])/steps;if(g>=minGap&&g<=maxGap)candidates.push(g);}
+ let bestScore=-Infinity,best=null;
+ for(const gap of candidates){const tolerance=Math.max(3,gap*.035);for(const anchor of ys){const steps=[];for(const y of ys){const s=roundEven((y-anchor)/gap);if(Math.abs(y-(anchor+s*gap))<=tolerance)steps.push(s);}
+   const unique=Array.from(new Set(steps)).sort((a,b)=>a-b);if(unique.length<minLines)continue;
+   const grp=groupConsecutive(unique,1).sort((a,b)=>b.length-a.length)[0];if(grp.length<minLines)continue;
+   let residual=0;const values=[];for(const step of grp){const target=anchor+step*gap;let picked=ys[0];for(const v of ys)if(Math.abs(v-target)<Math.abs(picked-target))picked=v;values.push(picked);residual+=Math.abs(picked-target);}
+   const score=values.length*1000+(Math.max(...values)-Math.min(...values))-residual*10;
+   if(score>bestScore){bestScore=score;best=values;}
+ }}
+ assert(best!==null,'no regular grid（等間隔のグリッドを特定できません）');const grid=Array.from(new Set(best.map(roundEven))).sort((a,b)=>a-b);
+ const gaps=grid.slice(1).map((v,i)=>v-grid[i]);const gap=median(gaps);
+ assert(Math.max(...gaps.map(v=>Math.abs(v-gap)))<=Math.max(4,gap*.06),'irregular grid');return [grid,gap];
+}
+function findRoughGraphXBounds(data,w,h,grid){const spans=[];
+ for(const y of grid.slice(0,3)){const xs=[];for(let x=0;x<w;x++){const i=px(data,w,x,y);if(neutral(data[i],data[i+1],data[i+2],25,190,253))xs.push(x);}
+  if(!xs.length)continue;const groups=groupConsecutive(xs,Math.max(6,Math.floor(w*.008))),long=groups.filter(g=>g[g.length-1]-g[0]+1>=Math.max(80,Math.floor(w*.05)));
+  if(!long.length)continue;const left=Math.min(...long.map(g=>g[0])),right=Math.max(...long.map(g=>g[g.length-1]));if(right-left>=w*.55)spans.push([left,right]);
+ }assert(spans.length,'no rough x（グラフの横幅が見つかりません）');const left=roundEven(median(spans.map(s=>s[0]))),right=roundEven(median(spans.map(s=>s[1])));
+ assert(right-left>=w*.55,'x too narrow');return [left,right];}
+function findVerticalHourLines(data,w,h,top,bottom,roughLeft,roughRight){
+ const scores=new Float32Array(w), hh=bottom-top+1;
+ for(let x=0;x<w;x++){let count=0;for(let y=top;y<=bottom;y++){const i=px(data,w,x,y);if(neutral(data[i],data[i+1],data[i+2],20,195,253))count++;}scores[x]=count/hh;}
+ const searchLeft=Math.max(0,roughLeft-Math.max(30,Math.floor(w*.03))), searchRight=Math.min(w-1,Math.floor(w*.98)),nms=Math.max(10,Math.floor(w*.008)),cand=[];
+ for(let x=Math.max(1,searchLeft);x<=Math.min(w-2,searchRight);x++){const score=scores[x];if(score>=.30&&score<=.79&&score>=scores[x-1]&&score>=scores[x+1])cand.push([x,score]);}
+ cand.sort((a,b)=>b[1]-a[1]);const chosen=[];for(const a of cand)if(chosen.every(b=>Math.abs(a[0]-b[0])>nms))chosen.push(a);return chosen.map(a=>a[0]).sort((a,b)=>a-b);
+}
+function matchTimeAxisModel(peaks,offsets,roughLeft,roughRight,duration,w){
+ assert(peaks.length>=2&&offsets.length>=2,'no hourlines');const roughPPM=(roughRight-roughLeft)/duration,roughHour=roughPPM*60,maxHours=Math.max(1,Math.ceil(duration/60)),minDifference=Math.max(60,w*.04);
+ const spacings=[roughHour];for(let i=0;i<peaks.length;i++)for(let j=i+1;j<peaks.length;j++){const difference=peaks[j]-peaks[i];if(difference<minDifference)continue;for(let step=1;step<=maxHours;step++){const spacing=difference/step;if(spacing>=roughHour*.55&&spacing<=roughHour*1.45)spacings.push(spacing);}}
+ let best=null;
+ for(const space of spacings){const ppm=space/60,tol=Math.max(7,space*.035);
+  for(const peak of peaks)for(const off of offsets){const start=peak-off*ppm,expected=offsets.map(o=>start+o*ppm),pairs=[];
+   for(let pi=0;pi<expected.length;pi++)for(let ki=0;ki<peaks.length;ki++){const d=Math.abs(peaks[ki]-expected[pi]);if(d<=tol)pairs.push([d,pi,ki,peaks[ki]]);}
+   pairs.sort((a,b)=>a[0]-b[0]);const usedA=new Set(),usedB=new Set(),matches=[];let residual=0;
+   for(const [d,pi,ki,det] of pairs){if(usedA.has(pi)||usedB.has(ki))continue;usedA.add(pi);usedB.add(ki);matches.push([offsets[pi],det]);residual+=d;}
+   if(matches.length<2)continue;const end=start+duration*ppm,boundary=Math.abs(start-roughLeft)+Math.abs(end-roughRight),spPenalty=Math.abs(ppm-roughPPM)*60;
+   let score=matches.length*100000-residual*100-boundary*2-spPenalty*10;if(start< -40||end>w+40)score-=100000;
+   if(!best||score>best.score)best={score,matches};
+  }
+ }assert(best,'no x calibration');const matches=best.matches,n=matches.length;
+ const offMean=mean(matches.map(m=>m[0])),detMean=mean(matches.map(m=>m[1]));let cov=0,vary=0;
+ for(const [off,det] of matches){cov+=(off-offMean)*(det-detMean);vary+=(off-offMean)**2;}assert(vary>0,'horizontal axis regression failed');
+ const ppm=cov/vary,start=detMean-ppm*offMean,end=start+duration*ppm;
+ const maxResidual=Math.max(...matches.map(m=>Math.abs(start+m[0]*ppm-m[1])));
+ assert(maxResidual<=Math.max(8,ppm*60*.04),'large residual');
+ assert(start>=roughLeft-Math.max(50,roughHour*.22)&&end<=roughRight+Math.max(50,roughHour*.22),'outside bounds');
+ return [start,end,ppm,matches.length];
+}
+function colorDistance3(r,g,b,target){return Math.max(Math.abs(r-target[0]),Math.abs(g-target[1]),Math.abs(b-target[2]));}
+function stationMatch(r,g,b,station,target,tolerance){const distance=colorDistance3(r,g,b,target);if(station===0){const spread=Math.max(r,g,b)-Math.min(r,g,b),brightness=(r+g+b)/3;return distance<=Math.max(55,tolerance)&&brightness<220&&spread<=30;}return distance<=tolerance;}
+function findColoredPlotBounds(data,w,h,top,bottom,roughLeft,roughRight,tolerance=50){
+ const x0=Math.max(0,roughLeft-120),x1=Math.min(w-1,roughRight+120),lefts=[],rights=[];
+ for(let s=0;s<6;s++){const xs=[];for(let x=x0;x<=x1;x++){let found=false;for(let y=top;y<=bottom;y++){const i=px(data,w,x,y);if(stationMatch(data[i],data[i+1],data[i+2],s,STATION_COLORS[s],tolerance)){found=true;break;}}if(found)xs.push(x-x0);}
+  if(xs.length<10)continue;const groups=groupConsecutive(xs,8).sort((a,b)=>(b[b.length-1]-b[0])-(a[a.length-1]-a[0])),best=groups[0];if(best[best.length-1]-best[0]+1<w*.25)continue;
+  lefts.push(x0+best[0]);rights.push(x0+best[best.length-1]);
+ }
+ assert(lefts.length>=3,'no colored bounds');const left=roundEven(median(lefts)),right=roundEven(median(rights));assert(right-left>=w*.45,'narrow colored bounds');return [left,right];
+}
+function calibrateTimeAxis(data,w,h,grid,roughLeft,roughRight,endTime,duration){
+ const peaks=findVerticalHourLines(data,w,h,grid[0],grid[grid.length-1],roughLeft,roughRight),startTime=new Date(endTime.getTime()-duration*60000);
+ const firstHourOffset=(60-startTime.getMinutes())%60,offsets=[];for(let m=firstHourOffset;m<=duration;m+=60)offsets.push(m);
+ if(peaks.length>=2&&offsets.length>=2){try{const [start,end,ppm,n]=matchTimeAxisModel(peaks,offsets,roughLeft,roughRight,duration,w);return [start,end,ppm,'hour-lines',n];}catch(err){/* exact reference: fallback when hour-line fitting fails */}}
+ const [left,right]=findColoredPlotBounds(data,w,h,grid[0],grid[grid.length-1],roughLeft,roughRight);const ppm=(right-left)/duration;assert(ppm>0,'negative ppm');return [left,right,ppm,'color-range-fallback',0];
+}
+function findCursorX(data,w,h,top,bottom,start,end){
+ const scores=new Float32Array(w), hh=bottom-top+1,candidates=[];
+ for(let x=0;x<w;x++){let count=0;for(let y=top;y<=bottom;y++){const i=px(data,w,x,y);if(neutral(data[i],data[i+1],data[i+2],35,150,253))count++;}scores[x]=count/hh;
+  if(scores[x]>=.82&&x>=Math.floor(start)-10&&x<=Math.ceil(end)+10)candidates.push(x);
+ }
+ const thin=groupConsecutive(candidates,2).filter(g=>g.length>=1&&g.length<=8);if(!thin.length)return null;
+ const score=g=>Math.max(...g.map(x=>scores[x]));let best=0;for(const g of thin)best=Math.max(best,score(g));
+ const near=thin.filter(g=>Math.abs(mean(g)-end)<=Math.max(25,(end-start)*.025)&&score(g)>=best-.025);
+ const chosen=(near.length?near:thin).sort((a,b)=>score(b)-score(a))[0];return roundEven(mean(chosen));
+}
+function findCursorStationY(data,w,h,cursorX,top,bottom,target,tolerance){
+ const x0=Math.max(0,cursorX-14),x1=Math.min(w-1,cursorX+14),counts=new Int32Array(bottom-top+1);let maxVal=0;
+ for(let y=top;y<=bottom;y++){let n=0;for(let x=x0;x<=x1;x++){const i=px(data,w,x,y);if(colorDistance3(data[i],data[i+1],data[i+2],target)<=tolerance)n++;}counts[y-top]=n;maxVal=Math.max(maxVal,n);}
+ if(maxVal<2)return null;const threshold=Math.max(2,Math.ceil(maxVal*.45)),rows=[];for(let y=0;y<counts.length;y++)if(counts[y]>=threshold)rows.push(y);
+ const groups=groupConsecutive(rows,2);if(!groups.length)return null;let best=groups[0],bestSum=-1;
+ for(const g of groups){const sum=g.reduce((a,b)=>a+counts[b],0);if(sum>bestSum){bestSum=sum;best=g;}}
+ const weightSum=best.reduce((a,b)=>a+counts[b],0);return best.reduce((a,b)=>a+b*counts[b],0)/weightSum+top;
+}
+function precomputeEvidence(data,w,h,top,bottom,x0,x1){
+ const hh=bottom-top+1,ww=x1-x0+1,n=hh*ww,stack=STATIONS.map(()=>new Float32Array(n)),radii=STATION_COLORS.map(c=>c.map(v=>v-255)),denom=radii.map(c=>c.reduce((a,v)=>a+v*v,0));
+ for(let y=0;y<hh;y++)for(let x=0;x<ww;x++){
+  const k=y*ww+x,i=px(data,w,x+x0,y+top),r=data[i],g=data[i+1],b=data[i+2],spread=Math.max(r,g,b)-Math.min(r,g,b);
+  const costs=new Float64Array(6);let min1=Infinity,min2=Infinity,minId=-1;
+  for(let s=0;s<6;s++){const d=radii[s],alpha=clamp(((r-255)*d[0]+(g-255)*d[1]+(b-255)*d[2])/denom[s],0,1);
+   const residual=Math.max(Math.abs(r-(255+alpha*d[0])),Math.abs(g-(255+alpha*d[1])),Math.abs(b-(255+alpha*d[2])));
+   const cost=residual+35*(1-alpha);costs[s]=cost;if(cost<min1){min2=min1;min1=cost;minId=s;}else if(cost<min2)min2=cost;
+  }
+  for(let s=0;s<6;s++){const other=s===minId?min2:min1;let v=costs[s]+Math.max(0,costs[s]-other+3)*4;
+   if(s===0)v+=Math.max(0,spread-25)*1.6;stack[s][k]=v;
+  }
+ }
+ return {stack,w:ww,h:hh};
+}
+function verticalLocalMin(distance,h,w,radius){if(radius<=0)return distance;const out=new Float32Array(distance.length);
+ for(let y=0;y<h;y++){const off=y*w;for(let x=0;x<w;x++){let best=(y-radius<0||y+radius>=h)?255:Infinity;for(let k=Math.max(0,y-radius);k<=Math.min(h-1,y+radius);k++){best=Math.min(best,distance[k*w+x]);}out[off+x]=best;}}
+ return out;
+}
+function chooseAnchorFromColor(local,h,w,preferred,tolerance){preferred=clamp(preferred,0,w-1);
+ for(let radius=0;radius<w;radius++)for(const x of [preferred-radius,preferred+radius]){if(x<0||x>=w)continue;let best=Infinity,bestY=0;for(let y=0;y<h;y++){const cost=local[y*w+x];if(cost<best){best=cost;bestY=y;}}if(best<=tolerance)return [x,bestY];}
+ let best=Infinity,bestY=0;for(let y=0;y<h;y++){const v=local[y*w+preferred];if(v<best){best=v;bestY=y;}}assert(best<=Math.max(90,tolerance*2),'no stable anchor');return [preferred,bestY];
+}
+function smallestIndices(costs,k){const idx=Array.from({length:costs.length},(_,i)=>i);idx.sort((a,b)=>costs[a]-costs[b]||a-b);return idx.slice(0,k);}
+// Efficient exact O(h+k) L1 distance transform over the sparse beam's previous states.
+// Tie-breaking prefers the earliest beam index, same as NumPy's argmin.
+function beamTransition(prevY,prevCosts,smooth,h){
+ const n=prevY.length,atY=Array.from({length:h},()=>[]);for(let i=0;i<n;i++)atY[prevY[i]].push(i);
+ const leftV=new Float64Array(h),leftId=new Int16Array(h),rightV=new Float64Array(h),rightId=new Int16Array(h);
+ let best=Infinity,bi=-1;
+ for(let y=0;y<h;y++){for(const i of atY[y]){const v=prevCosts[i]-smooth*prevY[i];if(v<best||(v===best&&i<bi)){best=v;bi=i;}}
+  leftV[y]=best+smooth*y;leftId[y]=bi;}
+ best=Infinity;bi=-1;
+ for(let y=h-1;y>=0;y--){for(const i of atY[y]){const v=prevCosts[i]+smooth*prevY[i];if(v<best||(v===best&&i<bi)){best=v;bi=i;}}
+  rightV[y]=best-smooth*y;rightId[y]=bi;}
+ const result=new Float32Array(h),parent=new Int16Array(h);
+ for(let y=0;y<h;y++){if(leftV[y]<rightV[y]||(leftV[y]===rightV[y]&&leftId[y]<=rightId[y])){result[y]=leftV[y];parent[y]=leftId[y];}else{result[y]=rightV[y];parent[y]=rightId[y];}}
+ return [result,parent];
+}
+function beamTraceDirection(emission,h,w,anchorX,anchorY,direction,beamWidth,smooth,anchorStrength){
+ assert(direction===-1||direction===1,'direction');const columns=[];for(let x=anchorX;x>=0&&x<w;x+=direction)columns.push(x);
+ const n=columns.length,k=Math.min(beamWidth,h),beamYs=new Array(n),parentSlots=new Array(n),first=new Float64Array(h);
+ for(let y=0;y<h;y++)first[y]=emission[y*w+columns[0]]+anchorStrength*Math.abs(y-anchorY);
+ let selected=smallestIndices(first,k);beamYs[0]=selected;parentSlots[0]=null;
+ let costs=selected.map(i=>first[i]);let min=Math.min(...costs);costs=costs.map(x=>x-min);
+ for(let step=1;step<n;step++){
+  const x=columns[step],prev=beamYs[step-1],[transition,parents]=beamTransition(prev,costs,smooth,h),total=new Float32Array(h);
+  for(let y=0;y<h;y++)total[y]=transition[y]+emission[y*w+x];
+  selected=smallestIndices(total,k);beamYs[step]=selected;parentSlots[step]=selected.map(y=>parents[y]);
+  costs=selected.map(y=>total[y]);min=Math.min(...costs);costs=costs.map(v=>v-min);
+ }
+ let slot=costs.indexOf(Math.min(...costs));const path=new Float32Array(n);
+ for(let step=n-1;step>=0;step--){path[step]=beamYs[step][slot];if(step)slot=parentSlots[step][slot];}
+ return [columns,path];
+}
+function refinePath(cost,h,w,path,threshold,radius){
+ const refined=Float32Array.from(path),observed=new Uint8Array(w),search=Math.max(3,radius+3);
+ for(let x=0;x<w;x++){const center=roundEven(path[x]),y0=Math.max(0,center-search),y1=Math.min(h-1,center+search),good=[];
+  for(let y=y0;y<=y1;y++)if(cost[y*w+x]<=threshold)good.push(y);if(!good.length)continue;
+  const groups=groupConsecutive(good,1);let best=groups[0],bestScore=Infinity;
+  for(const g of groups){let costSum=0;for(const y of g)costSum+=cost[y*w+x];const score=costSum/g.length+Math.abs(mean(g)-path[x])*1.5-Math.min(g.length,6)*.35;
+   if(score<bestScore){bestScore=score;best=g;}}
+  refined[x]=mean(best);observed[x]=1;
+ }
+ return [refined,observed];
+}
+function coverageAndMaxGap(observed){let good=0,maxGap=0,cur=0;
+ for(let i=0;i<observed.length;i++)if(observed[i]){good++;maxGap=Math.max(maxGap,cur);cur=0;}else cur++;
+ maxGap=Math.max(maxGap,cur);return [good/observed.length,maxGap];}
+function percentile(values,p){const a=Array.from(values).sort((x,y)=>x-y),idx=(a.length-1)*p/100,lo=Math.floor(idx),hi=Math.ceil(idx);return a[lo]+(a[hi]-a[lo])*(idx-lo);}
+function traceStationGlobal(data,w,h,station,evidence,traceLeft,traceRight,top,bottom,ppp,cursorX,cursorY,grid,threshold,nhkChromaGuard){
+ const x0=Math.max(0,traceLeft),x1=Math.min(w-1,traceRight),ww=x1-x0+1,hh=bottom-top+1;
+ assert(evidence.length===ww*hh,'evidence roi mismatched');const lineRadius=Math.max(1,Math.min(4,roundEven(hh/400))),local=verticalLocalMin(evidence,hh,ww,lineRadius),emission=new Float32Array(local.length);
+ for(let i=0;i<local.length;i++)emission[i]=Math.min(local[i],150);
+ let preferred=Math.floor((x1-x0)/2),suppressed=null;
+ if(station===0){
+  const gridRadius=Math.max(2,roundEven(h*.0015));for(const gy of grid){const ly=gy-top;
+   for(let y=Math.max(0,ly-gridRadius);y<Math.min(hh,ly+gridRadius+1);y++)for(let x=0;x<ww;x++)emission[y*ww+x]+=38;}
+  for(let y=0;y<hh;y++)for(let x=0;x<ww;x++){const i=px(data,w,x+x0,y+top),r=data[i],g=data[i+1],b=data[i+2],spread=Math.max(r,g,b)-Math.min(r,g,b),bright=(r+g+b)/3,k=y*ww+x;
+   if(bright>215&&spread<=18)emission[k]+=24;
+   if(nhkChromaGuard)emission[k]+=Math.max(0,spread-12)*2.5;
+  }
+  if(cursorX!==null&&cursorX>=x0&&cursorX<=x1){const cx=cursorX-x0,radius=Math.max(4,roundEven(w*.0025)),bl=Math.max(0,cx-radius),br=Math.min(ww,cx+radius+1);
+   for(let y=0;y<hh;y++)for(let x=bl;x<br;x++)emission[y*ww+x]=Math.max(85,emission[y*ww+x]);
+   suppressed=[bl,br];if(bl<=preferred&&preferred<br)preferred=Math.min(ww-1,br+Math.max(6,radius));
+  }
+ }
+ let anchorX,anchorY,anchor='color';
+ if(station!==0&&cursorX!==null&&cursorY!==null&&cursorX>=x0&&cursorX<=x1){anchorX=cursorX-x0;anchorY=cursorY-top;anchor='cursor';}
+ else{[anchorX,anchorY]=chooseAnchorFromColor(local,hh,ww,preferred,roundEven(threshold));
+  if(suppressed&&suppressed[0]<=anchorX&&anchorX<suppressed[1]){
+   const retry=Math.min(ww-1,suppressed[1]+Math.max(6,suppressed[1]-suppressed[0]));[anchorX,anchorY]=chooseAnchorFromColor(local,hh,ww,retry,roundEven(threshold));
+  }
+ }
+ const smoothBase=station===0?.62:.50,smooth=smoothBase*clamp(20/Math.max(ppp,1e-6),.60,1.80),beamWidth=station===0?32:24;
+ const [rx,rpath]=beamTraceDirection(emission,hh,ww,anchorX,anchorY,1,beamWidth,smooth,7);
+ const [lx,lpath]=beamTraceDirection(emission,hh,ww,anchorX,anchorY,-1,beamWidth,smooth,7);
+ const path=new Float32Array(ww);for(let i=0;i<rx.length;i++)path[rx[i]]=rpath[i];for(let i=0;i<lx.length;i++)path[lx[i]]=lpath[i];
+ let [refined,observed]=refinePath(evidence,hh,ww,path,threshold,lineRadius);
+ if(suppressed){for(let x=suppressed[0];x<suppressed[1];x++){refined[x]=path[x];observed[x]=0;}}
+ if(station!==0&&cursorX!==null&&cursorY!==null&&cursorX>=x0&&cursorX<=x1){const cx=cursorX-x0;for(let x=Math.max(0,cx-1);x<Math.min(ww,cx+2);x++){refined[x]=cursorY-top;observed[x]=1;}}
+ const [,strictObserved]=refinePath(evidence,hh,ww,refined,STRICT,lineRadius);
+ const [,relaxedObserved]=refinePath(evidence,hh,ww,refined,RELAXED,lineRadius);
+ const [strictCov,strictGap]=coverageAndMaxGap(strictObserved),[relaxedCov]=coverageAndMaxGap(relaxedObserved),[coverage,maxGap]=coverageAndMaxGap(observed);
+ const ys=new Float32Array(ww),costs=new Float32Array(ww);let maxStep=0,longJumps=0;
+ for(let x=0;x<ww;x++){ys[x]=refined[x]+top;const ry=clamp(roundEven(refined[x]),0,hh-1),val=evidence[ry*ww+x];costs[x]=val;
+  if(x){const step=Math.abs(refined[x]-refined[x-1]);maxStep=Math.max(maxStep,step);if(step>Math.max(8,ppp))longJumps++;}
+ }
+ const diag={coverage,max_gap_pixels:maxGap,quality:coverage>=.97?'A':coverage>=.90?'B':'C',
+  tracking_method:'global-dp-antialias-optimized-js',anchor,inferred_pixels:ww-observed.reduce((a,b)=>a+b,0),
+  mean_evidence_cost:roundTo(mean(Array.from(costs)),2),p95_evidence_cost:roundTo(percentile(costs,95),2),smoothness:roundTo(smooth,4),
+  strict_24_coverage:roundTo(strictCov,6),strict_24_max_gap_pixels:strictGap,relaxed_35_coverage:roundTo(relaxedCov,6),
+  evidence_threshold:threshold,nhk_chroma_guard:nhkChromaGuard?1:0,long_jump_count:longJumps,max_step_pp:roundTo(maxStep/ppp,3)};
+ return {xs0:x0,ys,observed,diag};
+}
+function interpTrace(trace,x){const {xs0,ys}=trace,q=x-xs0;
+ if(q<=0)return ys[0];if(q>=ys.length-1)return ys[ys.length-1];const lo=Math.floor(q),p=q-lo;return ys[lo]*(1-p)+ys[lo+1]*p;
+}
+function formatDateTime(date){const z=n=>String(n).padStart(2,'0');return date.getFullYear()+'/'+z(date.getMonth()+1)+'/'+z(date.getDate())+' '+z(date.getHours())+':'+z(date.getMinutes());}
+function fileStamp(date){const z=n=>String(n).padStart(2,'0');return date.getFullYear()+z(date.getMonth()+1)+z(date.getDate())+'_'+z(date.getHours())+z(date.getMinutes());}
+function buildRows(traces,calib){const rows=[],stations=STATIONS,dur=calib.duration_minutes;
+ for(let m=0;m<=dur;m++){
+  const t=new Date(calib.start_time.getTime()+m*60000),sampleX=calib.graph_left+m*calib.pixels_per_minute,raw=[],statuses=[];
+  for(let s=0;s<6;s++){const tr=traces[s],y=interpTrace(tr,sampleX),v=Math.max(0,(calib.y_zero-y)/calib.pixels_per_percent);
+   raw.push(v);const nearest=clamp(roundEven(sampleX-tr.xs0),0,tr.observed.length-1);statuses.push(tr.observed[nearest]?'実測':'経路推定');
+  }
+  const total=raw.reduce((a,b)=>a+b,0),row={'日時':formatDateTime(t)};
+  stations.forEach((st,s)=>row[st]=roundTo(raw[s],1));row['6局合計']=roundTo(total,1);row['その他5局合計']=roundTo(total-raw[0],1);
+  stations.forEach((st,s)=>row[st+'_シェア']=total!==0?roundTo(raw[s]/total*100,2):null);
+  stations.forEach((st,s)=>{const rank=1+raw.filter(v=>v>raw[s]).length;row[st+'_順位']=rank;row[st+'_状態']=statuses[s];});
+  assert(Object.keys(row).length===27,'CSV列数が27列と一致しません');rows.push(row);
+ }
+ return rows;
+}
+async function analyzeImage(imageData,endTime,duration,tolerance,gridStep,evidenceMode,onProgress=()=>{}){
+ const data=imageData.data,w=imageData.width,h=imageData.height;assert(w>200&&h>200,'画像が小さすぎます');
+ onProgress('水平目盛線を解析しています…');await delayUI();
+ const lines=findThinHorizontalLines(data,w,h),[grid,gridGap]=selectRegularGrid(lines,h,3),top=grid[0],zero=grid[grid.length-1],ppp=gridGap/gridStep;
+ const [roughLeft,roughRight]=findRoughGraphXBounds(data,w,h,grid);
+ const [startX,endX,ppm,axisMethod,nHour]=calibrateTimeAxis(data,w,h,grid,roughLeft,roughRight,endTime,duration);
+ const calib={graph_left:startX,graph_right:endX,graph_top:top,graph_bottom:zero,y_zero:zero,pixels_per_percent:ppp,pixels_per_minute:ppm,start_time:new Date(endTime.getTime()-duration*60000),end_time:endTime,duration_minutes:duration,grid_percent_step:gridStep,grid_gap_pixels:gridGap,time_axis_method:axisMethod,time_line_inliers:nHour};
+ const cursorX=findCursorX(data,w,h,top,zero,startX,endX),traceLeft=Math.max(0,Math.floor(startX)-4),traceRight=Math.min(w-1,Math.ceil(endX)+4);
+ onProgress('6局の色証拠を計算しています…');await delayUI();
+ const evidence=precomputeEvidence(data,w,h,top,zero,traceLeft,traceRight),availability={};
+ for(let s=0;s<6;s++){const cost=evidence.stack[s],ww=evidence.w,hh=evidence.h;let good=0;
+  for(let x=0;x<ww;x++){let minimum=Infinity;for(let y=0;y<hh;y++)minimum=Math.min(minimum,cost[y*ww+x]);if(minimum<=STRICT)good++;}availability[STATIONS[s]]=good/ww;
+ }
+ const axisUpper=(zero-top)/ppp,high=axisUpper>=HIGH_RANGE_PERCENT,weak=STATIONS.filter(st=>availability[st]<.88).length;
+ const adaptive=evidenceMode==='high-range'||(evidenceMode==='auto'&&high&&weak>=2),threshold=adaptive?RELAXED:STRICT;
+ const traces=[],diagnostics={};
+ for(let s=0;s<6;s++){
+  onProgress(`${STATIONS[s]}の曲線を追跡しています…（${s+1}/6）`);await delayUI();
+  const cursorY=(cursorX!==null&&s!==0)?findCursorStationY(data,w,h,cursorX,top,zero,STATION_COLORS[s],Math.max(1,tolerance)):null;
+  const tr=traceStationGlobal(data,w,h,s,evidence.stack[s],traceLeft,traceRight,top,zero,ppp,cursorX,cursorY,grid,threshold,adaptive),diag=tr.diag;
+  const gapMins=diag.max_gap_pixels/ppm;diag.max_gap_minutes=roundTo(gapMins,2);
+  const cov=diag.coverage;diag.quality=cov>=.97&&gapMins<=2?'A':cov>=.90&&gapMins<=5?'B':'C';
+  const strictGap=diag.strict_24_max_gap_pixels/ppm,strictCov=diag.strict_24_coverage;
+  diag.quality_strict=strictCov>=.97&&strictGap<=2?'A':strictCov>=.90&&strictGap<=5?'B':'C';
+  diag.quality_basis=adaptive?'緩和35':'厳格24';diag.reader_patch='9.2.1-adaptive-range-js';diag.axis_upper_percent=roundTo(axisUpper,2);
+  diag.range_mode=adaptive?(evidenceMode==='high-range'?'forced-high':'high-adaptive'):
+    (evidenceMode==='strict'?'forced-strict':(high?'high-strict':'normal-strict'));
+  diag.color_availability_strict=roundTo(availability[STATIONS[s]],6);
+  traces.push(tr);diagnostics[STATIONS[s]]=diag;
+ }
+ onProgress('27列のCSVと集計結果を作成しています…');await delayUI();
+ const rows=buildRows(traces,calib);return {rows,calib,traces,diagnostics,imageData};
+}
+
+let currentResult=null,currentCSV='',currentPreviewURL=null,currentFile=null,currentImage=null, busy=false;
+function esc(s){return String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');}
+function statusMessage(msg,kind=''){const el=$('status');el.className='notice'+(kind?' '+kind:'');el.textContent=msg;}
+function pad(n){return String(n).padStart(2,'0');}
+function setBusy(flag){busy=flag;$('analyze').disabled=flag;$('reset').disabled=flag;$('inputFile').disabled=flag;}
+function resetScreen(keepFields=true){currentResult=null;currentCSV='';currentFile=null;currentImage=null;
+ $('results').classList.add('hidden');$('previewSection').classList.add('hidden');$('inputFile').value='';$('csvFallback').value='';
+ if(currentPreviewURL){URL.revokeObjectURL(currentPreviewURL);currentPreviewURL=null;}
+ if(!keepFields){$('endDate').value='';$('endTime').value='';}
+ statusMessage('次のスクリーンショットを選んで解析してください。');
+}
+$('tolerance').addEventListener('input',()=>$('tolLabel').textContent=$('tolerance').value);
+$('reset').addEventListener('click',()=>resetScreen());
+$('inputFile').addEventListener('change',async e=>{
+ const file=e.target.files?.[0];currentFile=file||null;currentResult=null;currentCSV='';$('results').classList.add('hidden');
+ if(currentPreviewURL){URL.revokeObjectURL(currentPreviewURL);currentPreviewURL=null;}
+ if(!file){$('previewSection').classList.add('hidden');return;}
+ if(!/image\/(png|jpeg|webp)/.test(file.type)){statusMessage('PNG、JPEG、WebPの画像を選択してください。','error');return;}
+ currentPreviewURL=URL.createObjectURL(file);const img=$('preview');img.src=currentPreviewURL;
+ $('previewTitle').textContent=`画像：${file.name}`;$('previewSection').classList.remove('hidden');
+ img.onload=()=>$('previewTitle').textContent=`画像：${file.name} / ${img.naturalWidth}×${img.naturalHeight}px`;
+ statusMessage('画像を読み込みました。更新日時を指定して解析してください。');
+});
+function readImage(file){return new Promise((resolve,reject)=>{
+ const url=URL.createObjectURL(file),img=new Image();img.onload=()=>{
+  URL.revokeObjectURL(url);try{const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+   const ctx=canvas.getContext('2d',{willReadFrequently:true});assert(ctx,'canvasが利用できません');ctx.drawImage(img,0,0);resolve(ctx.getImageData(0,0,canvas.width,canvas.height));
+  }catch(e){reject(e);}
+ };img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('画像を読み込めませんでした'));};img.src=url;
+});}
+function parseKnownValues(text){if(!text.trim())return null;const a=text.replaceAll('、',',').split(',').map(x=>x.trim().replaceAll('％','').replaceAll('%',''));
+ assert(a.length===6,'画面表示値はNHK、日テレ、テレ朝、TBS、テレ東、フジの順に6個入力してください。');
+ const v=a.map(Number);assert(a.every(s=>s.length>0)&&v.every(Number.isFinite),'画面上部の数値は6個とも数値にしてください');return v;
+}
+$('analyze').addEventListener('click',async()=>{
+ if(busy)return;const file=currentFile,dv=$('endDate').value,tv=$('endTime').value,duration=Number($('duration').value),grid=Number($('gridStep').value),tol=Number($('tolerance').value),mode=$('mode').value;
+ if(!file||!dv||!tv){statusMessage('画像と「データ更新」の日付・時刻を指定してください。','error');return;}
+ if(!Number.isInteger(duration)||duration<30||duration>360){statusMessage('グラフ表示時間は30～360分で指定してください。','error');return;}
+ if(!Number.isFinite(grid)||grid<.5||grid>20){statusMessage('縦軸1目盛りは0.5～20%で指定してください。','error');return;}
+ const date=new Date(`${dv}T${tv}:00`);if(Number.isNaN(date.getTime())){statusMessage('日付・時刻が不正です。','error');return;}
+ let known;try{known=parseKnownValues($('endValues').value);}catch(err){statusMessage(err.message,'error');return;}
+ setBusy(true);$('results').classList.add('hidden');statusMessage('画像を準備しています…');
+ try{
+  const im=await readImage(file);currentImage=im;
+  const result=await analyzeImage(im,date,duration,tol,grid,mode,msg=>statusMessage(msg));result.known=known;
+  currentResult=result;currentCSV=makeCSV(result.rows);renderResult(result);
+  statusMessage(`解析完了：${result.rows.length}時点 / 色証拠閾値=${Object.values(result.diagnostics)[0].evidence_threshold}`,'success');
+ }catch(err){currentResult=null;currentCSV='';$('results').classList.add('hidden');console.error(err);
+  statusMessage(`解析に失敗しました：${err?.message??err}。グラフ全体・0%線・水平グリッド線を確認してください。`,'error');
+ }finally{setBusy(false);}
+});
+function csvEsc(x){if(x===null||x===undefined||Number.isNaN(x))return '';let s=String(x);if(/[\r\n",]/.test(s))s='"'+s.replaceAll('"','""')+'"';return s;}
+function makeCSV(rows){return '\ufeff'+[CSV_COLUMNS.join(','),...rows.map(row=>CSV_COLUMNS.map(k=>csvEsc(row[k])).join(','))].join('\r\n')+'\r\n';}
+function downloadCSV(csv,name){const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download=name;a.style.display='none';document.body.appendChild(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},12000);
+}
+const isEmbedded=window.self!==window.top;
+if(isEmbedded)$('download').textContent='⬇ CSVをダウンロード（保存確認後に次へ）';
+$('download').addEventListener('click',()=>{if(!currentResult)return;
+ const date=currentResult.calib.end_time,name=`${fileStamp(date)}_viewership.csv`;
+ downloadCSV(currentCSV,name);
+ // A sandboxed Google Sites iframe may forbid downloads. The browser cannot
+ // tell us whether the save actually succeeded, so do not discard data there.
+ if(isEmbedded){statusMessage('CSVのダウンロードを開始しました。保存されていることを確認してから「次の画像を選ぶ」を押してください。保存できない場合はCSVのコピーを利用してください。','warn');}
+ else setTimeout(()=>{if(currentResult&&currentResult.calib.end_time===date)resetScreen();},1400);
+});
+$('copyCsv').addEventListener('click',async()=>{
+ if(!currentResult)return;try{await navigator.clipboard.writeText(currentCSV.replace(/^\ufeff/,''));statusMessage('CSVをクリップボードにコピーしました。','success');}
+ catch(e){$('csvFallback').value=currentCSV.replace(/^\ufeff/,'');$('csvFallback').closest('details').open=true;$('csvFallback').focus();$('csvFallback').select();statusMessage('自動コピーできませんでした。下のCSV本文を選択してコピーしてください。','warn');}
+});
+function metric(title,value){return `<div class="metric"><span>${esc(title)}</span><b>${esc(value)}</b></div>`;}
+function makeTable(columns,rows,limit){const cols=columns||CSV_COLUMNS;const showing=(limit?rows.slice(0,limit):rows);
+ let out='<div class="tblwrap"><table class="tbl"><thead><tr>'+cols.map(v=>`<th>${esc(v)}</th>`).join('')+'</tr></thead><tbody>';
+ for(const row of showing)out+='<tr>'+cols.map(c=>`<td>${esc(row[c]??'')}</td>`).join('')+'</tr>';
+ out+='</tbody></table></div>';return out;
+}
+function renderResult(result){const {rows,calib,diagnostics,known,traces}=result;const first=Object.values(diagnostics)[0],len=rows.length;
+ $('results').classList.remove('hidden');$('summary').innerHTML=metric('時点数',len)+metric('色証拠閾値',first.evidence_threshold)+metric('横軸較正',calib.time_axis_method)+metric('品質Cの局数',Object.values(diagnostics).filter(d=>d.quality==='C').length);
+ $('calibration').innerHTML=[['0%線（px）',roundTo(calib.y_zero,2)],['グラフ上端（px）',roundTo(calib.graph_top,2)],['1%あたりpx',roundTo(calib.pixels_per_percent,3)],['1分あたりpx',roundTo(calib.pixels_per_minute,3)],
+ ['推定縦軸上限',roundTo((calib.y_zero-calib.graph_top)/calib.pixels_per_percent,2)],['縦軸1目盛り',calib.grid_percent_step],['横軸較正',calib.time_axis_method],['正時線数',calib.time_line_inliers]].map(([a,b])=>metric(a,b)).join('');
+ const cols=['局','モード','使用閾値','厳格24の証拠率(%)','緩和35の証拠率(%)','採用した証拠率(%)','品質','強色証拠での品質','最長推定(分)','最大1pxジャンプ(%)','平均色コスト','アンカー'];
+ const dr=STATIONS.map(s=>{const d=diagnostics[s];return {'局':s,'モード':d.range_mode,'使用閾値':d.evidence_threshold,'厳格24の証拠率(%)':roundTo(d.strict_24_coverage*100,1),'緩和35の証拠率(%)':roundTo(d.relaxed_35_coverage*100,1),
+ '採用した証拠率(%)':roundTo(d.coverage*100,1),'品質':d.quality,'強色証拠での品質':d.quality_strict,'最長推定(分)':d.max_gap_minutes,'最大1pxジャンプ(%)':d.max_step_pp,'平均色コスト':d.mean_evidence_cost,'アンカー':d.anchor};});
+ $('diagnostics').innerHTML=makeTable(cols,dr);if(Object.values(diagnostics).some(d=>d.quality==='C'))$('diagnostics').insertAdjacentHTML('beforeend','<div class="notice warn">品質Cの局があります。必要に応じて重ね合わせ表示で確認してください。</div>');
+ $('endpointCheck').classList.toggle('hidden',known===null);
+ if(known!==null){const data=STATIONS.map((s,i)=>({'放送局':s,'画面表示(%)':known[i],'画像復元(%)':rows[rows.length-1][s],'差(pt)':roundTo(rows[rows.length-1][s]-known[i],2)}));
+  const mae=mean(data.map(x=>Math.abs(x['差(pt)'])));$('endpointTitle').textContent=`終端照合：6局平均絶対誤差 ${mae.toFixed(3)}pt`;
+  $('endpointTable').innerHTML=makeTable(['放送局','画面表示(%)','画像復元(%)','差(pt)'],data);
+ }
+ $('overlayDetails').classList.toggle('hidden',!$('overlay').checked);
+ if($('overlay').checked)drawOverlay(result);
+ const shareData=STATIONS.map(st=>({station:st,values:rows.map(r=>r[st+'_順位'])}));
+ const rankRows=STATIONS.map(s=>{const obj={'局':s};for(let i=1;i<=6;i++)obj[`${i}位`]=roundTo(rows.filter(row=>row[s+'_順位']===i).length/rows.length*100,2);return obj;});
+ $('ranksTable').innerHTML=makeTable(['局','1位','2位','3位','4位','5位','6位'],rankRows);
+ $('allData').innerHTML=makeTable(CSV_COLUMNS,rows);
+ $('csvFallback').value=currentCSV.replace(/^\ufeff/,'');
+ selectTab('ratings');
+}
+function selectTab(name){for(const button of $('tabs').querySelectorAll('button'))button.classList.toggle('active',button.dataset.tab===name);
+ for(const pane of document.querySelectorAll('.pane'))pane.classList.toggle('active',pane.id==='pane-'+name);
+ if(currentResult){if(name==='ratings')drawRatings();else if(name==='shares')drawShares();else if(name==='ranks')drawRanks();}
+}
+$('tabs').addEventListener('click',e=>{const btn=e.target.closest('button[data-tab]');if(btn)selectTab(btn.dataset.tab);});
+function setupPlot(canvas){const rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1),w=Math.max(320,Math.round(rect.width)),h=Math.max(170,Math.round(rect.height));
+ canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);return {ctx,w,h};}
+function drawMultiLine(canvas,labels,series,colors,yMax,title,yLabel){const {ctx,w,h}=setupPlot(canvas),margin={top:42,right:16,bottom:44,left:54},pw=w-margin.left-margin.right,ph=h-margin.top-margin.bottom;
+ const maxY=yMax||Math.max(1,...series.flatMap(s=>s.values.filter(v=>Number.isFinite(v)))),minY=0;
+ ctx.font='bold 15px -apple-system, sans-serif';ctx.fillStyle='#263547';ctx.fillText(title,margin.left,23);
+ ctx.font='11px -apple-system, sans-serif';ctx.strokeStyle='#e6eaf0';ctx.lineWidth=1;ctx.fillStyle='#5d6b7b';
+ for(let i=0;i<=5;i++){const val=minY+(maxY-minY)*i/5,y=margin.top+ph-i*ph/5;ctx.beginPath();ctx.moveTo(margin.left,y);ctx.lineTo(margin.left+pw,y);ctx.stroke();ctx.fillText(val.toFixed(yMax===100?0:1),8,y+3);}
+ const n=labels.length;ctx.fillStyle='#667488';for(let i=0;i<=5;i++){const index=Math.min(n-1,Math.floor((n-1)*i/5)),x=margin.left+pw*i/5;let lab=labels[index];if(lab.length>5)lab=lab.slice(-5);ctx.fillText(lab,x-16,h-23);}
+ ctx.save();ctx.beginPath();ctx.rect(margin.left,margin.top,pw,ph);ctx.clip();
+ series.forEach((s,si)=>{ctx.strokeStyle=colors[si]||'#222';ctx.lineWidth=si===0&&series.length===1?2.4:1.7;ctx.beginPath();let started=false;
+  s.values.forEach((v,i)=>{if(v==null||!Number.isFinite(v)){started=false;return;}const x=margin.left+pw*i/(n-1),y=margin.top+ph*(1-(v-minY)/(maxY-minY));if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);});ctx.stroke();});ctx.restore();
+ const legendY=h-6;ctx.font='10px -apple-system, sans-serif';let x=margin.left;
+ series.forEach((s,i)=>{ctx.fillStyle=colors[i];ctx.fillRect(x,legendY-7,9,9);ctx.fillStyle='#334258';ctx.fillText(s.name,x+12,legendY+1);x+=Math.max(54,ctx.measureText(s.name).width+23);});
+}
+function drawRatings(){const r=currentResult;if(!r)return;const rows=r.rows,labels=rows.map(row=>row['日時']),series=STATIONS.map(st=>({name:st.replace('日本テレビ','日テレ').replace('テレビ朝日','テレ朝').replace('テレビ東京','テレ東').replace('フジテレビ','フジ').replace('NHK総合','NHK'),values:rows.map(row=>row[st])}));
+ drawMultiLine($('ratingsPlot'),labels,series,CHART_COLORS,Math.max(2,Math.ceil(Math.max(...series.flatMap(s=>s.values))/2)*2),'6局視聴率（%）');
+ drawMultiLine($('totalPlot'),labels,[{name:'6局合計',values:rows.map(row=>row['6局合計'])}],['#175ac6'],null,'6局合計（%）');}
+function drawShares(){const rows=currentResult.rows,labels=rows.map(row=>row['日時']),s=STATIONS.map(st=>({name:st.replace('日本テレビ','日テレ').replace('テレビ朝日','テレ朝').replace('テレビ東京','テレ東').replace('フジテレビ','フジ').replace('NHK総合','NHK'),values:rows.map(r=>r[st+'_シェア'])}));drawMultiLine($('sharesPlot'),labels,s,CHART_COLORS,100,'6局シェア（%）');}
+function drawRanks(){const rows=currentResult.rows,{ctx,w,h}=setupPlot($('ranksPlot')),margin={top:45,right:15,bottom:64,left:49},pw=w-margin.left-margin.right,ph=h-margin.top-margin.bottom;
+ ctx.font='bold 15px -apple-system, sans-serif';ctx.fillStyle='#263547';ctx.fillText('順位別割合（各局の1～6位、%）',margin.left,23);
+ ctx.strokeStyle='#e6eaf0';ctx.font='11px sans-serif';ctx.fillStyle='#5d6b7b';for(let i=0;i<=5;i++){const y=margin.top+ph-i*ph/5;ctx.beginPath();ctx.moveTo(margin.left,y);ctx.lineTo(margin.left+pw,y);ctx.stroke();ctx.fillText(`${i*20}`,12,y+3);}
+ const bw=pw/6*.73,palette=['#206ec8','#5693dc','#8ab0e4','#a9b7c9','#c8d2df','#e2e9f0'];
+ for(let s=0;s<6;s++){const x=margin.left+(s+.13)*pw/6;let stacked=0;for(let rank=1;rank<=6;rank++){const pct=rows.filter(row=>row[STATIONS[s]+'_順位']===rank).length/rows.length*100,barH=ph*pct/100,y=margin.top+ph-(stacked+pct)/100*ph;
+  ctx.fillStyle=palette[rank-1];ctx.fillRect(x,y,bw,barH);stacked+=pct;}
+  ctx.fillStyle='#3f5063';ctx.font='10px sans-serif';ctx.fillText(['NHK','日テレ','テレ朝','TBS','テレ東','フジ'][s],x-2,h-34);
+ }
+ let x=margin.left;for(let i=0;i<6;i++){ctx.fillStyle=palette[i];ctx.fillRect(x,h-15,9,9);ctx.fillStyle='#34455b';ctx.fillText(`${i+1}位`,x+12,h-7);x+=45;}
+}
+function drawOverlay(result){const src=result.imageData,canvas=$('overlayCanvas');canvas.width=src.width;canvas.height=src.height;const ctx=canvas.getContext('2d');ctx.putImageData(src,0,0);
+ result.traces.forEach((tr,s)=>{ctx.strokeStyle=OVERLAY_COLORS[s];ctx.lineWidth=2;ctx.beginPath();for(let i=0;i<tr.ys.length;i++){const x=tr.xs0+i,y=tr.ys[i];if(!i)ctx.moveTo(x,y);else ctx.lineTo(x,y);}ctx.stroke();
+  const missing=[];for(let i=0;i<tr.observed.length;i++)if(!tr.observed[i])missing.push(i);
+  const groups=groupConsecutive(missing,1),minimum=Math.max(8,Math.floor(result.calib.pixels_per_minute*2));ctx.fillStyle='#000';
+  for(const group of groups)if(group.length>=minimum){const mid=group[Math.floor(group.length/2)],x=tr.xs0+mid,y=tr.ys[mid];ctx.beginPath();ctx.arc(x,y,4,0,2*Math.PI);ctx.fill();}
+ });}
+window.addEventListener('resize',()=>{if(!currentResult)return;const name=$('tabs').querySelector('.active')?.dataset.tab;if(name==='ratings')drawRatings();else if(name==='shares')drawShares();else if(name==='ranks')drawRanks();});
+
+</script>
+</body></html>
